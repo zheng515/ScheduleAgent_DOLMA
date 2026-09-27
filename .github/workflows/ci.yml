@@ -1,0 +1,36 @@
+name: CI
+
+# 什么时候运行：推送到 main，或者有任何 PR
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 任务 1：后端测试
+  backend:
+    runs-on: ubuntu-latest          # 在 GitHub 提供的 Linux 服务器上运行
+    defaults:
+      run:
+        working-directory: backend  # 下面的命令都在 backend/ 目录里执行
+    steps:
+      - uses: actions/checkout@v4   # 拉取代码
+      - uses: astral-sh/setup-uv@v6 # 安装 uv
+      - run: uv sync --locked       # 按 uv.lock 安装依赖（会自动装 Python 3.12）
+      - run: uv run pytest          # 运行测试
+
+  # 任务 2：前端构建
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22                                  # Vite 7 需要 Node 20.19 以上
+          cache: npm                                        # 缓存依赖，加快下次运行
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci                 # 按 package-lock.json 安装依赖
+      - run: npm run build          # 检查能否构建成功
