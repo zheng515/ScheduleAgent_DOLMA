@@ -95,6 +95,11 @@ def tool_messages(messages):
 # stubbed calendar and weather
 # --------------------------------------------------------------------------- #
 
+# "Now" for every stubbed test: Monday of the week the sample events sit in.
+# The code under test works out presets like "this_week" from the current time, so
+# leaving the real clock in place made the suite start failing once that week ended.
+FROZEN_NOW = "2026-09-21T09:00:00+10:00"
+
 # Two 'Gym' entries on different days, so title matching and event_ids both matter.
 SAMPLE_EVENTS = [
     {"id": "e1", "summary": "Gym",
@@ -127,7 +132,12 @@ class Recorder:
 
 @contextlib.contextmanager
 def stubbed_google(events=None, connected=True):
-    """Swap google_calendar's functions inside tool_handlers for in-memory ones."""
+    """Swap google_calendar's functions inside tool_handlers for in-memory ones,
+    and pin the clock to FROZEN_NOW so date presets resolve to the sample week."""
+    from datetime import datetime
+
+    import app
+    import formatting
     import tool_handlers
 
     events = SAMPLE_EVENTS if events is None else events
@@ -157,6 +167,12 @@ def stubbed_google(events=None, connected=True):
         rec.created.append(kwargs)
         return {"id": f"new{len(rec.created)}", "summary": kwargs.get("summary")}
 
+    # app.py imported the clock by name, so it holds its own reference to patch.
+    frozen_now = datetime.fromisoformat(FROZEN_NOW)
+    clocks = {mod: mod._current_sydney_datetime for mod in (formatting, app)}
+    for mod in clocks:
+        mod._current_sydney_datetime = lambda: frozen_now
+
     tool_handlers.is_connected = lambda: connected
     tool_handlers.find_events = fake_find
     tool_handlers.create_calendar_event = fake_create
@@ -167,6 +183,8 @@ def stubbed_google(events=None, connected=True):
     finally:
         for name, fn in originals.items():
             setattr(tool_handlers, name, fn)
+        for mod, fn in clocks.items():
+            mod._current_sydney_datetime = fn
 
 
 # Two named venues at known distances, one with an address recorded in OSM and one
